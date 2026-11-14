@@ -1,0 +1,9 @@
+{
+  "item.hiboupostal.blank_letter": "Lettre vierge",
+  "item.hiboupostal.sealed_letter": "Lettre scellée",
+  "item.hiboupostal.parcel": "Carton",
+  "item.hiboupostal.sealed_parcel": "Carton scellé",
+  "block.hiboupostal.mailbox": "Boîte aux lettres",
+  "item.hiboupostal.blank_beuglante": "Beuglante vierge",
+  "item.hiboupostal.beuglante": "Beuglante"
+}

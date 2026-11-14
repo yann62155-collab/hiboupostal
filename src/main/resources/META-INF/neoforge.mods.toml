@@ -1,0 +1,24 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="hiboupostal"
+version="${mod_version}"
+displayName="Hibou Postal"
+authors="Citizen"
+description='''Systeme de hiboux postaux medieval : lettres, colis en carton, beuglantes, boite aux lettres et carnet de contacts. Compatible joueurs console.'''
+
+[[dependencies.hiboupostal]]
+    modId="neoforge"
+    type="required"
+    versionRange="[21.1.215,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.hiboupostal]]
+    modId="minecraft"
+    type="required"
+    versionRange="[1.21.1]"
+    ordering="NONE"
+    side="BOTH"

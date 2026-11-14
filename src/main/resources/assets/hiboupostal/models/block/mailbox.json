@@ -1,0 +1,64 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "hiboupostal:block/mailbox_side",
+    "post": "hiboupostal:block/mailbox_post",
+    "side": "hiboupostal:block/mailbox_side",
+    "front": "hiboupostal:block/mailbox_front",
+    "roof": "hiboupostal:block/mailbox_roof",
+    "flag": "hiboupostal:block/mailbox_flag"
+  },
+  "elements": [
+    {
+      "name": "poteau",
+      "from": [6.5, 0, 6.5], "to": [9.5, 9, 9.5],
+      "faces": {
+        "north": { "texture": "#post" }, "south": { "texture": "#post" },
+        "east":  { "texture": "#post" }, "west":  { "texture": "#post" },
+        "down":  { "texture": "#post", "cullface": "down" }
+      }
+    },
+    {
+      "name": "boite",
+      "from": [3, 9, 2], "to": [13, 14, 14],
+      "faces": {
+        "north": { "uv": [3, 2, 13, 7], "texture": "#front" },
+        "south": { "uv": [3, 2, 13, 7], "texture": "#side" },
+        "east":  { "uv": [2, 2, 14, 7], "texture": "#side" },
+        "west":  { "uv": [2, 2, 14, 7], "texture": "#side" },
+        "down":  { "uv": [3, 2, 13, 14], "texture": "#side" }
+      }
+    },
+    {
+      "name": "toit",
+      "from": [2.5, 14, 1.5], "to": [13.5, 16, 14.5],
+      "faces": {
+        "north": { "uv": [2, 0, 13, 2], "texture": "#roof" },
+        "south": { "uv": [2, 0, 13, 2], "texture": "#roof" },
+        "east":  { "uv": [1, 0, 14, 2], "texture": "#roof" },
+        "west":  { "uv": [1, 0, 14, 2], "texture": "#roof" },
+        "up":    { "uv": [2, 1, 13, 14], "texture": "#roof" },
+        "down":  { "uv": [2, 1, 13, 14], "texture": "#roof" }
+      }
+    },
+    {
+      "name": "mat_drapeau",
+      "from": [13, 10, 9], "to": [13.5, 16, 9.5],
+      "faces": {
+        "north": { "texture": "#post" }, "south": { "texture": "#post" },
+        "east":  { "texture": "#post" }, "west":  { "texture": "#post" },
+        "up":    { "texture": "#post" }
+      }
+    },
+    {
+      "name": "drapeau",
+      "from": [13, 13, 9.5], "to": [13.5, 16, 13],
+      "faces": {
+        "north": { "texture": "#flag" }, "south": { "texture": "#flag" },
+        "east":  { "uv": [0, 0, 4, 3], "texture": "#flag" },
+        "west":  { "uv": [0, 0, 4, 3], "texture": "#flag" },
+        "up":    { "texture": "#flag" }, "down": { "texture": "#flag" }
+      }
+    }
+  ]
+}

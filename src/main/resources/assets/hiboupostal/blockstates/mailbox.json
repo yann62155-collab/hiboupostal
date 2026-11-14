@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "hiboupostal:block/mailbox" },
+    "facing=east":  { "model": "hiboupostal:block/mailbox", "y": 90 },
+    "facing=south": { "model": "hiboupostal:block/mailbox", "y": 180 },
+    "facing=west":  { "model": "hiboupostal:block/mailbox", "y": 270 }
+  }
+}

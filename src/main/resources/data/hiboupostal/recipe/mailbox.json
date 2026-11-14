@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "PPP",
+    "PCP",
+    " S "
+  ],
+  "key": {
+    "P": { "tag": "minecraft:planks" },
+    "C": { "item": "minecraft:chest" },
+    "S": { "item": "minecraft:stick" }
+  },
+  "result": { "id": "hiboupostal:mailbox", "count": 1 }
+}
