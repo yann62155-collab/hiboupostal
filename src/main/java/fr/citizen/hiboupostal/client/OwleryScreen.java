@@ -208,10 +208,16 @@ public class OwleryScreen extends Screen {
         micButton = addRenderableWidget(Button.builder(micLabel(), b -> {
                     BeuglanteAudio.nextDevice();
                     b.setMessage(micLabel());
-                    setStatus("Micro choisi : " + BeuglanteAudio.deviceName(), true);
+                    String error = BeuglanteAudio.testSelectedDevice();
+                    if (error == null) {
+                        setStatus("✔ " + BeuglanteAudio.deviceName() + " : ce micro fonctionne.", true);
+                    } else {
+                        setStatus("✖ " + BeuglanteAudio.deviceName() + " : " + error + " Cliquez encore pour essayer le suivant.", false);
+                    }
                 })
                 .bounds(rx, top + 132, rw, 14)
-                .tooltip(Tooltip.create(Component.literal("Cliquer pour changer de micro si le vôtre n'est pas capté.")))
+                .tooltip(Tooltip.create(Component.literal("Cliquer pour passer au micro suivant (il est testé aussitôt).\n"
+                        + "« Automatique » essaie le micro par défaut puis tous les autres.")))
                 .build());
 
         sendButton = addRenderableWidget(Button.builder(
@@ -351,7 +357,7 @@ public class OwleryScreen extends Screen {
         if (error != null) {
             setStatus(error, false);
         } else {
-            setStatus("Parlez fort, la beuglante vous écoute... (" + BeuglanteAudio.formatInfo() + ")", true);
+            setStatus("Parlez fort, la beuglante vous écoute... (" + BeuglanteAudio.usedDevice() + ")", true);
         }
     }
 

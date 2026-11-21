@@ -11,7 +11,9 @@ import javax.sound.sampled.SourceDataLine;
 import javax.sound.sampled.TargetDataLine;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Enregistrement au micro et lecture des beuglantes (client PC uniquement).
@@ -21,9 +23,10 @@ import java.util.List;
  * <p>
  * Pour que l'enregistrement marche sur un maximum de micros :
  * <ul>
- *   <li>on essaie plusieurs formats (16 / 48 / 44,1 kHz…, mono ou stéréo, petit ou gros boutiste)
- *       et on convertit nous-mêmes en 16 kHz mono (filtre passe-bas + rééchantillonnage) ;</li>
- *   <li>le joueur peut choisir son micro parmi les périphériques de capture ;</li>
+ *   <li>on essaie les formats que chaque micro déclare (8 à 192 kHz, 8/16/24/32 bits, entier ou flottant,
+ *       mono ou stéréo) et on convertit nous-mêmes en 16 kHz mono (passe-bas + rééchantillonnage) ;</li>
+ *   <li>en mode automatique, si le micro par défaut refuse, on essaie les autres périphériques ;</li>
+ *   <li>le joueur peut choisir son micro, qui est testé dès qu'il le sélectionne ;</li>
  *   <li>on détecte un micro muet (accès au micro bloqué par Windows, micro coupé…) ;</li>
  *   <li>à l'arrêt, on récupère ce qui restait dans la mémoire tampon du micro (rien n'est coupé).</li>
  * </ul>
@@ -39,8 +42,10 @@ public final class BeuglanteAudio {
     // Choix du micro
     // ==================================================================
 
-    /** Index du micro choisi dans {@link #captureDevices()} ; -1 = micro par défaut du système. */
+    /** Index du micro choisi dans {@link #captureDevices()} ; -1 = automatique (micro par défaut puis les autres). */
     private static int selectedDevice = -1;
+    /** Nom du micro réellement utilisé au dernier enregistrement. */
+    private static volatile String usedDevice = "";
 
     /** Périphériques capables d'enregistrer (les "Port" de Windows sont exclus). */
     public static List<Mixer.Info> captureDevices() {
@@ -55,7 +60,7 @@ public final class BeuglanteAudio {
         return list;
     }
 
-    /** Passe au micro suivant ; renvoie le nom du micro choisi. */
+    /** Passe au micro suivant ; renvoie son nom. */
     public static String nextDevice() {
         List<Mixer.Info> devices = captureDevices();
         selectedDevice++;
@@ -64,14 +69,129 @@ public final class BeuglanteAudio {
     }
 
     public static String deviceName() {
-        List<Mixer.Info> devices = captureDevices();
-        if (selectedDevice < 0 || selectedDevice >= devices.size()) return "Micro par défaut";
-        return devices.get(selectedDevice).getName();
+        Mixer.Info mi = selectedMixer();
+        return mi == null ? "Automatique" : mi.getName();
+    }
+
+    public static String usedDevice() {
+        return usedDevice;
     }
 
     private static Mixer.Info selectedMixer() {
         List<Mixer.Info> devices = captureDevices();
         return selectedDevice >= 0 && selectedDevice < devices.size() ? devices.get(selectedDevice) : null;
+    }
+
+    /**
+     * Teste le micro choisi (ouverture puis fermeture immédiate).
+     * Renvoie null s'il fonctionne, sinon un court message d'erreur.
+     */
+    public static String testSelectedDevice() {
+        Opened o = openAny(selectedMixer());
+        if (o == null) return "Ce périphérique refuse l'enregistrement.";
+        try {
+            o.line.close();
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    // ==================================================================
+    // Recherche d'un format accepté par le micro
+    // ==================================================================
+
+    private record Opened(TargetDataLine line, AudioFormat format, String device) {}
+
+    /**
+     * Ouvre le micro donné (null = automatique : micro par défaut du système, puis chaque
+     * périphérique de capture l'un après l'autre).
+     */
+    private static Opened openAny(Mixer.Info only) {
+        if (only != null) {
+            return openOn(AudioSystem.getMixer(only), only.getName());
+        }
+        Opened o = openOn(null, "Micro par défaut");
+        if (o != null) return o;
+        for (Mixer.Info mi : captureDevices()) {
+            o = openOn(AudioSystem.getMixer(mi), mi.getName());
+            if (o != null) return o;
+        }
+        return null;
+    }
+
+    /** Essaie les formats possibles sur un périphérique (null = périphérique par défaut). */
+    private static Opened openOn(Mixer mixer, String name) {
+        for (AudioFormat fmt : candidateFormats(mixer)) {
+            DataLine.Info info = new DataLine.Info(TargetDataLine.class, fmt);
+            TargetDataLine l = null;
+            try {
+                boolean supported = mixer == null ? AudioSystem.isLineSupported(info) : mixer.isLineSupported(info);
+                if (!supported) continue;
+                l = (TargetDataLine) (mixer == null ? AudioSystem.getLine(info) : mixer.getLine(info));
+                // tampon d'environ 0,5 s : évite les pertes si le jeu ralentit
+                l.open(fmt, Math.max(fmt.getFrameSize(), (int) (fmt.getSampleRate() * 0.5f) * fmt.getFrameSize()));
+                return new Opened(l, fmt, name);
+            } catch (Exception e) {
+                lastOpenError = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                if (l != null) {
+                    try {
+                        l.close();
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static volatile String lastOpenError = "";
+
+    /**
+     * Formats à essayer : d'abord ceux qui ne demandent aucune conversion (16 bits),
+     * puis tous ceux que le périphérique déclare (8, 16, 24 ou 32 bits, entier ou flottant,
+     * mono ou stéréo), y compris pour le matériel audio "pro" qui n'accepte que du 24 / 32 bits.
+     */
+    private static List<AudioFormat> candidateFormats(Mixer mixer) {
+        Map<String, AudioFormat> out = new LinkedHashMap<>();
+        for (float rate : RATES) {
+            for (int ch = 1; ch <= 2; ch++) {
+                add(out, new AudioFormat(rate, 16, ch, true, false));
+            }
+        }
+        Line.Info[] infos;
+        try {
+            infos = mixer == null
+                    ? AudioSystem.getTargetLineInfo(new Line.Info(TargetDataLine.class))
+                    : mixer.getTargetLineInfo();
+        } catch (Exception e) {
+            infos = new Line.Info[0];
+        }
+        for (Line.Info li : infos) {
+            if (!(li instanceof DataLine.Info dli)) continue;
+            for (AudioFormat f : dli.getFormats()) {
+                AudioFormat.Encoding enc = f.getEncoding();
+                if (!enc.equals(AudioFormat.Encoding.PCM_SIGNED) && !enc.equals(AudioFormat.Encoding.PCM_UNSIGNED)
+                        && !enc.equals(AudioFormat.Encoding.PCM_FLOAT)) continue;
+                int bits = f.getSampleSizeInBits();
+                if (bits != 8 && bits != 16 && bits != 24 && bits != 32) continue;
+                int[] channels = f.getChannels() == AudioSystem.NOT_SPECIFIED ? new int[]{1, 2}
+                        : new int[]{f.getChannels()};
+                float[] rates = f.getSampleRate() == AudioSystem.NOT_SPECIFIED ? RATES : new float[]{f.getSampleRate()};
+                for (int ch : channels) {
+                    if (ch < 1 || ch > 8) continue;
+                    for (float rate : rates) {
+                        if (rate < 8000 || rate > 192000) continue;
+                        int frameSize = bits / 8 * ch;
+                        add(out, new AudioFormat(enc, rate, bits, ch, frameSize, rate, f.isBigEndian()));
+                    }
+                }
+            }
+        }
+        return new ArrayList<>(out.values());
+    }
+
+    private static void add(Map<String, AudioFormat> out, AudioFormat f) {
+        out.putIfAbsent(f.toString(), f);
     }
 
     // ==================================================================
@@ -101,49 +221,26 @@ public final class BeuglanteAudio {
         level = 0;
         hitMax = false;
         captureError = null;
+        lastOpenError = "";
 
-        Mixer.Info mixerInfo = selectedMixer();
-        Mixer mixer = mixerInfo == null ? null : AudioSystem.getMixer(mixerInfo);
-        String lastError = "aucun format audio compatible";
-        TargetDataLine opened = null;
-        AudioFormat used = null;
-
-        search:
-        for (float rate : RATES) {
-            for (int channels = 1; channels <= 2; channels++) {
-                for (boolean bigEndian : new boolean[]{false, true}) {
-                    AudioFormat fmt = new AudioFormat(rate, 16, channels, true, bigEndian);
-                    DataLine.Info info = new DataLine.Info(TargetDataLine.class, fmt);
-                    try {
-                        boolean supported = mixer == null ? AudioSystem.isLineSupported(info) : mixer.isLineSupported(info);
-                        if (!supported) continue;
-                        TargetDataLine l = (TargetDataLine) (mixer == null ? AudioSystem.getLine(info) : mixer.getLine(info));
-                        // tampon d'environ 0,5 s : évite les pertes si le jeu ralentit
-                        l.open(fmt, (int) (rate * 0.5f) * fmt.getFrameSize());
-                        opened = l;
-                        used = fmt;
-                        break search;
-                    } catch (Exception e) {
-                        lastError = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-                    }
-                }
-            }
+        Opened o = openAny(selectedMixer());
+        if (o == null) {
+            HibouPostal.LOGGER.warn("Aucun micro utilisable ({}) : {}", deviceName(), lastOpenError);
+            return selectedMixer() == null
+                    ? "Aucun micro n'accepte d'enregistrer. Vérifiez qu'un micro est branché et autorisé dans Windows."
+                    : "Ce périphérique refuse l'enregistrement. Choisissez-en un autre avec le bouton Micro.";
         }
 
-        if (opened == null) {
-            HibouPostal.LOGGER.warn("Aucun micro utilisable : {}", lastError);
-            return "Impossible d'ouvrir le micro (" + lastError + "). Vérifiez qu'il est branché et non utilisé "
-                    + "par une autre application, ou choisissez-en un autre avec le bouton Micro.";
-        }
-
-        formatInfo = (int) used.getSampleRate() + " Hz " + (used.getChannels() == 1 ? "mono" : "stéréo");
-        HibouPostal.LOGGER.info("Beuglante : enregistrement via {} ({})", deviceName(), formatInfo);
-        final TargetDataLine started = opened;
-        final AudioFormat fmt = used;
+        AudioFormat used = o.format();
+        usedDevice = o.device();
+        formatInfo = (int) used.getSampleRate() + " Hz, " + used.getSampleSizeInBits() + " bits, "
+                + (used.getChannels() == 1 ? "mono" : used.getChannels() + " canaux");
+        HibouPostal.LOGGER.info("Beuglante : enregistrement via {} ({})", usedDevice, used);
+        final TargetDataLine started = o.line();
         started.start();
         line = started;
         recording = true;
-        Thread t = new Thread(() -> recordLoop(started, fmt), "Hibou-Beuglante-Micro");
+        Thread t = new Thread(() -> recordLoop(started, used), "Hibou-Beuglante-Micro");
         t.setDaemon(true);
         recordThread = t;
         t.start();
@@ -151,18 +248,16 @@ public final class BeuglanteAudio {
     }
 
     private static void recordLoop(TargetDataLine l, AudioFormat fmt) {
+        Decoder dec = new Decoder(fmt);
+        Converter converter = new Converter(fmt.getSampleRate());
         int frameSize = fmt.getFrameSize();
-        int channels = fmt.getChannels();
-        boolean bigEndian = fmt.isBigEndian();
-        float rate = fmt.getSampleRate();
-        Converter converter = new Converter(rate);
-        byte[] buf = new byte[Math.max(frameSize, (int) (rate * 0.05f) * frameSize)]; // ~50 ms
+        byte[] buf = new byte[Math.max(frameSize, (int) (fmt.getSampleRate() * 0.05f) * frameSize)]; // ~50 ms
 
         try {
             while (recording) {
                 int n = l.read(buf, 0, buf.length - (buf.length % frameSize));
                 if (n <= 0) continue;
-                if (!consume(buf, n, frameSize, channels, bigEndian, converter)) {
+                if (!consume(buf, n, dec, converter)) {
                     hitMax = true;
                     recording = false;
                 }
@@ -171,9 +266,9 @@ public final class BeuglanteAudio {
             l.stop();
             int avail = l.available();
             while (avail >= frameSize && !hitMax) {
-                int n = l.read(buf, 0, Math.min(buf.length, avail - (avail % frameSize)));
+                int n = l.read(buf, 0, Math.min(buf.length - (buf.length % frameSize), avail - (avail % frameSize)));
                 if (n <= 0) break;
-                if (!consume(buf, n, frameSize, channels, bigEndian, converter)) hitMax = true;
+                if (!consume(buf, n, dec, converter)) hitMax = true;
                 avail = l.available();
             }
         } catch (Exception e) {
@@ -190,25 +285,68 @@ public final class BeuglanteAudio {
         }
     }
 
-    /** Convertit un bloc lu au micro en 16 kHz mono et l'ajoute ; false si la durée max est atteinte. */
-    private static boolean consume(byte[] buf, int n, int frameSize, int channels, boolean bigEndian, Converter conv) {
-        int frames = n / frameSize;
-        short[] mono = new short[frames];
-        int blockPeak = 0;
-        for (int f = 0; f < frames; f++) {
-            int sum = 0;
+    /** Lit les échantillons bruts du micro, quel que soit leur format, et les ramène en mono 16 bits. */
+    static final class Decoder {
+        private final int channels;
+        private final int bytesPerSample;
+        private final int frameSize;
+        private final boolean bigEndian;
+        private final boolean unsigned;
+        private final boolean floating;
+
+        Decoder(AudioFormat f) {
+            this.channels = Math.max(1, f.getChannels());
+            this.bytesPerSample = f.getSampleSizeInBits() / 8;
+            this.frameSize = f.getFrameSize() > 0 ? f.getFrameSize() : bytesPerSample * channels;
+            this.bigEndian = f.isBigEndian();
+            this.unsigned = f.getEncoding().equals(AudioFormat.Encoding.PCM_UNSIGNED);
+            this.floating = f.getEncoding().equals(AudioFormat.Encoding.PCM_FLOAT);
+        }
+
+        int frames(int bytes) {
+            return bytes / frameSize;
+        }
+
+        /** Échantillon mono (moyenne des canaux) de la trame f, à l'échelle 16 bits. */
+        double mono(byte[] buf, int f) {
+            double sum = 0;
+            int base = f * frameSize;
             for (int c = 0; c < channels; c++) {
-                int i = f * frameSize + c * 2;
-                int s = bigEndian
-                        ? (short) ((buf[i] << 8) | (buf[i + 1] & 0xFF))
-                        : (short) ((buf[i] & 0xFF) | (buf[i + 1] << 8));
-                sum += s;
+                sum += sample(buf, base + c * bytesPerSample);
             }
-            int s = sum / channels;
-            mono[f] = (short) s;
+            return sum / channels;
+        }
+
+        private double sample(byte[] buf, int off) {
+            long v = 0;
+            for (int i = 0; i < bytesPerSample; i++) {
+                int b = buf[off + (bigEndian ? i : bytesPerSample - 1 - i)] & 0xFF;
+                v = (v << 8) | b;
+            }
+            int bits = bytesPerSample * 8;
+            if (floating && bytesPerSample == 4) {
+                return Float.intBitsToFloat((int) v) * 32767.0;
+            }
+            if (unsigned) {
+                v -= 1L << (bits - 1);
+            } else {
+                v = (v << (64 - bits)) >> (64 - bits); // extension du signe
+            }
+            return bits >= 16 ? v / (double) (1L << (bits - 16)) : v * 256.0;
+        }
+    }
+
+    /** Convertit un bloc lu au micro en 16 kHz mono et l'ajoute ; false si la durée max est atteinte. */
+    static boolean consume(byte[] buf, int n, Decoder dec, Converter conv) {
+        int frames = dec.frames(n);
+        short[] mono = new short[frames];
+        double blockPeak = 0;
+        for (int f = 0; f < frames; f++) {
+            double s = Math.max(Short.MIN_VALUE, Math.min(Short.MAX_VALUE, dec.mono(buf, f)));
+            mono[f] = (short) Math.round(s);
             blockPeak = Math.max(blockPeak, Math.abs(s));
         }
-        float p = blockPeak / 32768f;
+        float p = (float) (blockPeak / 32768.0);
         level = p;
         if (p > peak) peak = p;
 
