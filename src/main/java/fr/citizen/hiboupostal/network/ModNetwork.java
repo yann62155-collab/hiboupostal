@@ -16,7 +16,7 @@ public final class ModNetwork {
 
     public static void register(RegisterPayloadHandlersEvent event) {
         // optional() : les clients sans le mod (joueurs Xbox via Geyser) peuvent quand même se connecter
-        PayloadRegistrar registrar = event.registrar("2").optional();
+        PayloadRegistrar registrar = event.registrar("3").optional();
 
         // Serveur -> client (les classes client ne sont chargées que côté client via ClientBridge)
         registrar.playToClient(Payloads.OpenOwlery.TYPE, Payloads.OpenOwlery.STREAM_CODEC,

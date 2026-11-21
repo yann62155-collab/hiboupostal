@@ -36,9 +36,11 @@ public final class Config {
             .comment("Distance maximale (blocs) pour tendre son sceau (son numéro) a un autre joueur avec /hibou sceau.")
             .defineInRange("sealRange", 8, 1, 64);
 
+    // Nouveau nom de clé (l'ancienne "beuglanteMaxSeconds" plafonnait à 30 s) : la valeur 120 s
+    // s'applique ainsi aussi aux serveurs qui ont déjà un fichier de configuration.
     public static final ModConfigSpec.IntValue BEUGLANTE_MAX_SECONDS = BUILDER
-            .comment("Duree maximale d'enregistrement vocal d'une beuglante (secondes).")
-            .defineInRange("beuglanteMaxSeconds", 20, 3, 30);
+            .comment("Duree maximale d'enregistrement vocal d'une beuglante (secondes). 120 = 2 minutes.")
+            .defineInRange("beuglanteMaxDurationSeconds", 120, 3, 120);
 
     public static final ModConfigSpec.IntValue BEUGLANTE_RANGE = BUILDER
             .comment("Distance (blocs) a laquelle une beuglante est entendue quand elle eclate.")

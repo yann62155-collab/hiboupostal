@@ -52,6 +52,8 @@ public class OwleryScreen extends Screen {
     private Button stopButton;
     private Button playButton;
     private Button clearButton;
+    private Button micButton;
+    private boolean wasRecording = false;
     private Button sendButton;
 
     private String recipientText;
@@ -85,7 +87,7 @@ public class OwleryScreen extends Screen {
         titleBox = null;
         bodyBox = null;
         cryBox = null;
-        recButton = stopButton = playButton = clearButton = null;
+        recButton = stopButton = playButton = clearButton = micButton = null;
 
         left = (width - W) / 2;
         top = (height - H) / 2;
@@ -187,24 +189,52 @@ public class OwleryScreen extends Screen {
         int bw = (rw - 6) / 4;
         recButton = addRenderableWidget(Button.builder(Component.literal("● Enreg.").withStyle(ChatFormatting.RED), b -> startRec())
                 .bounds(rx, top + 104, bw, 16)
-                .tooltip(Tooltip.create(Component.literal("Enregistrer votre voix au micro (" + maxSeconds + " s max)")))
+                .tooltip(Tooltip.create(Component.literal("Enregistrer votre voix au micro (" + duration(maxSeconds) + " max)")))
                 .build());
-        stopButton = addRenderableWidget(Button.builder(Component.literal("■ Stop"), b -> BeuglanteAudio.stopRecording())
+        stopButton = addRenderableWidget(Button.builder(Component.literal("■ Stop"), b -> {
+                    BeuglanteAudio.stopRecording();
+                    BeuglanteAudio.stopPreview();
+                })
                 .bounds(rx + bw + 2, top + 104, bw, 16).build());
-        playButton = addRenderableWidget(Button.builder(Component.literal("▶ Écouter"),
-                        b -> BeuglanteAudio.play(BeuglanteAudio.recordedUlaw(), 1.0f))
-                .bounds(rx + 2 * (bw + 2), top + 104, bw, 16).build());
-        clearButton = addRenderableWidget(Button.builder(Component.literal("✖ Effacer"), b -> BeuglanteAudio.clear())
+        playButton = addRenderableWidget(Button.builder(Component.literal("▶ Écouter"), b -> BeuglanteAudio.preview())
+                .bounds(rx + 2 * (bw + 2), top + 104, bw, 16)
+                .tooltip(Tooltip.create(Component.literal("Réécouter votre enregistrement avant de l'envoyer")))
+                .build());
+        clearButton = addRenderableWidget(Button.builder(Component.literal("✖ Effacer"), b -> {
+                    BeuglanteAudio.clear();
+                    status = Component.empty();
+                })
                 .bounds(rx + 3 * (bw + 2), top + 104, bw, 16).build());
+        micButton = addRenderableWidget(Button.builder(micLabel(), b -> {
+                    BeuglanteAudio.nextDevice();
+                    b.setMessage(micLabel());
+                    setStatus("Micro choisi : " + BeuglanteAudio.deviceName(), true);
+                })
+                .bounds(rx, top + 132, rw, 14)
+                .tooltip(Tooltip.create(Component.literal("Cliquer pour changer de micro si le vôtre n'est pas capté.")))
+                .build());
 
         sendButton = addRenderableWidget(Button.builder(
                         Component.literal("‼ Envoyer la beuglante").withStyle(ChatFormatting.RED), b -> sendBeuglante())
                 .bounds(rx, top + 186, 124, 18).build());
     }
 
+    private Component micLabel() {
+        return Component.literal("Micro : " + font.plainSubstrByWidth(BeuglanteAudio.deviceName(), 150));
+    }
+
+    /** 125 -> "2:05" */
+    private static String duration(float seconds) {
+        int total = (int) seconds;
+        return total / 60 + ":" + String.format(Locale.ROOT, "%02d", total % 60);
+    }
+
     private void switchMode(Mode m) {
         if (mode == m) return;
-        if (m == Mode.LETTER) BeuglanteAudio.stopRecording();
+        if (m == Mode.LETTER) {
+            BeuglanteAudio.stopRecording();
+            BeuglanteAudio.stopPreview();
+        }
         mode = m;
         status = Component.empty();
         rebuildWidgets();
@@ -279,9 +309,10 @@ public class OwleryScreen extends Screen {
                     : Tooltip.create(Component.literal("Il vous faut une beuglante vierge, ou 1 papier + 1 poudre à canon.")));
             if (recButton != null) {
                 recButton.active = !rec;
-                stopButton.active = rec;
+                stopButton.active = rec || BeuglanteAudio.isPreviewing();
                 playButton.active = !rec && has;
                 clearButton.active = !rec && has;
+                micButton.active = !rec;
             }
         }
     }
@@ -290,6 +321,29 @@ public class OwleryScreen extends Screen {
     public void tick() {
         super.tick();
         updateButtons();
+        if (mode != Mode.BEUGLANTE) return;
+
+        boolean rec = BeuglanteAudio.isRecording();
+        if (rec && BeuglanteAudio.seemsSilent()) {
+            setStatus("Aucun son capté ! Vérifiez votre micro (bouton Micro) et que Windows autorise "
+                    + "les applications de bureau à utiliser le micro.", false);
+        }
+        if (wasRecording && !rec) {
+            // l'enregistrement vient de s'arrêter : on vérifie qu'il est bon
+            String err = BeuglanteAudio.captureError();
+            if (err != null) {
+                setStatus(err, false);
+            } else if (BeuglanteAudio.seemsSilent()) {
+                setStatus("L'enregistrement est muet : aucun son n'a été capté. Changez de micro ou vérifiez "
+                        + "l'accès au micro dans Windows, puis réessayez.", false);
+            } else if (BeuglanteAudio.reachedMax()) {
+                setStatus("Durée maximale atteinte (" + duration(maxSeconds) + "). Écoutez-la avant d'envoyer.", true);
+            } else {
+                setStatus("Enregistrement prêt : " + duration(BeuglanteAudio.recordedSeconds())
+                        + ". Écoutez-le avant d'envoyer.", true);
+            }
+        }
+        wasRecording = rec;
     }
 
     private void startRec() {
@@ -297,7 +351,7 @@ public class OwleryScreen extends Screen {
         if (error != null) {
             setStatus(error, false);
         } else {
-            setStatus("Parlez fort, la beuglante vous écoute...", true);
+            setStatus("Parlez fort, la beuglante vous écoute... (" + BeuglanteAudio.formatInfo() + ")", true);
         }
     }
 
@@ -328,6 +382,11 @@ public class OwleryScreen extends Screen {
             return;
         }
         BeuglanteAudio.stopRecording();
+        BeuglanteAudio.stopPreview();
+        if (BeuglanteAudio.seemsSilent()) {
+            setStatus("Votre enregistrement est muet. Effacez-le (✖) pour envoyer le cri seul, ou réenregistrez.", false);
+            return;
+        }
         byte[] audio = BeuglanteAudio.recordedUlaw();
         int uploadId = -1;
         if (audio != null) {
@@ -369,6 +428,7 @@ public class OwleryScreen extends Screen {
     @Override
     public void removed() {
         BeuglanteAudio.stopRecording();
+        BeuglanteAudio.stopPreview();
         super.removed();
     }
 
@@ -419,7 +479,7 @@ public class OwleryScreen extends Screen {
         } else {
             g.drawString(font, "Cri (lu par tous)", rx, top + 64, Parchment.CRIMSON, false);
             g.drawString(font, "Voix (facultatif)", rx, top + 94, Parchment.INK, false);
-            String time = String.format(Locale.ROOT, "%.1f / %d s", BeuglanteAudio.recordedSeconds(), maxSeconds);
+            String time = duration(BeuglanteAudio.recordedSeconds()) + " / " + duration(maxSeconds);
             g.drawString(font, time, left + W - 10 - font.width(time), top + 94,
                     BeuglanteAudio.isRecording() ? Parchment.CRIMSON : Parchment.INK_FAINT, false);
 
@@ -432,9 +492,8 @@ public class OwleryScreen extends Screen {
                 int lvl = (int) (rw * Math.min(1f, BeuglanteAudio.level() * 2f));
                 g.fill(rx, barY + 5, rx + lvl, barY + 7, Parchment.GOLD);
             }
-            g.drawWordWrap(font, Component.literal("À son arrivée, elle éclate au-dessus du destinataire : "
-                            + "tous ceux qui sont proches lisent le cri et entendent votre voix."),
-                    rx, top + 134, rw, Parchment.INK_FAINT);
+            g.drawWordWrap(font, Component.literal("Tous ceux qui sont proches liront le cri et entendront votre voix."),
+                    rx, top + 150, rw, Parchment.INK_FAINT);
         }
 
         // Statut

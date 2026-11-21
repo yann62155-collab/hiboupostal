@@ -41,6 +41,11 @@ public final class Beuglantes {
     public static final int MAX_CRY_LENGTH = 100;
     /** Taille d'un morceau envoyé par le client (sous la limite de 32 Ko des paquets client -> serveur). */
     public static final int CHUNK_SIZE = 24000;
+    /**
+     * Taille d'un morceau renvoyé aux joueurs pour la lecture. Un paquet serveur -> client est limité
+     * à 1 Mo ; 2 minutes de voix pèsent ~1,9 Mo : on découpe en morceaux de 256 Ko.
+     */
+    public static final int PLAY_CHUNK_SIZE = 256 * 1024;
 
     // ------------------------------------------------------------------
     // Réception de l'enregistrement en plusieurs morceaux
@@ -191,9 +196,20 @@ public final class Beuglantes {
             if (p.distanceToSqr(x, y, z) > rangeSq) continue;
             p.sendSystemMessage(line);
             if (audio != null && p.connection.hasChannel(Payloads.PlayBeuglante.TYPE)) {
-                PacketDistributor.sendToPlayer(p, new Payloads.PlayBeuglante(x, y, z, range, c.senderName(), audio));
+                sendAudio(p, x, y, z, range, c.senderName(), audio);
             }
         }
         recipient.sendSystemMessage(Msg.prefix().append(Msg.italic("L'enveloppe rouge se consume en une pluie de cendres.")));
+    }
+
+    /** Envoie la voix au joueur en morceaux ; son client la rassemble puis la joue. */
+    private static void sendAudio(ServerPlayer p, double x, double y, double z, int range, String sender, byte[] audio) {
+        int playId = java.util.concurrent.ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE);
+        int total = (audio.length + PLAY_CHUNK_SIZE - 1) / PLAY_CHUNK_SIZE;
+        for (int i = 0; i < total; i++) {
+            int from = i * PLAY_CHUNK_SIZE;
+            byte[] part = java.util.Arrays.copyOfRange(audio, from, Math.min(audio.length, from + PLAY_CHUNK_SIZE));
+            PacketDistributor.sendToPlayer(p, new Payloads.PlayBeuglante(playId, i, total, x, y, z, range, sender, part));
+        }
     }
 }

@@ -20,7 +20,7 @@ Pour tester en jeu : `./gradlew runClient` (ou `runServer`).
 |---|---|
 | **Numéro de hibou** | Attribué automatiquement à la première connexion (n°0001, n°0002…). Il ne change jamais. **Il est secret** : personne ne voit la liste des numéros. |
 | **Carnet de contacts** | La volière n'affiche que **vos contacts**. Pour ajouter quelqu'un, il faut connaître son numéro : `/hibou sceau <joueur>` le lui tend (joueur à moins de 8 blocs), puis `/hibou ajouter <numéro> [surnom]` ou le bouton « ★ Ajouter » de la volière, ou « ★ Carnet » sur une lettre reçue. On peut écrire à un numéro hors carnet si on le connaît. |
-| **Beuglante** | Lettre hurlante. Beuglante vierge = lettre vierge + poudre à canon + colorant rouge (ou 1 papier + 1 poudre à canon directement). Onglet « ‼ Beuglante » de la volière : un **cri écrit** (100 caractères) + une **voix enregistrée au micro** (facultative, 20 s max). À l'arrivée, elle éclate au-dessus du destinataire : titre géant, cri dans le chat de tous les joueurs à 24 blocs, voix jouée chez les joueurs PC, fumée et hurlement. Non ouverte, elle éclate d'elle-même au bout de 60 s. Jamais déposée en boîte aux lettres : elle attend le retour du destinataire. |
+| **Beuglante** | Lettre hurlante. Beuglante vierge = lettre vierge + poudre à canon + colorant rouge (ou 1 papier + 1 poudre à canon directement). Onglet « ‼ Beuglante » de la volière : un **cri écrit** (100 caractères) + une **voix enregistrée au micro** (facultative, 2 minutes max ; choix du micro, réécoute, détection d'un micro muet). À l'arrivée, elle éclate au-dessus du destinataire : titre géant, cri dans le chat de tous les joueurs à 24 blocs, voix jouée chez les joueurs PC, fumée et hurlement. Non ouverte, elle éclate d'elle-même au bout de 60 s. Jamais déposée en boîte aux lettres : elle attend le retour du destinataire. |
 | **Joueurs Xbox / console** | Détection automatique (client sans le mod). Volière = coffre vanilla (carnet en têtes de joueurs + boutons), lettres envoyées avec un **livre et plume** (`/hibou envoyer`), lettres reçues sous forme de **livre écrit**, colis via un coffre d'une rangée (carton ou coffre vanilla consommé), cartons reçus déballés directement, boîte aux lettres en coffre vanilla (retrait seul), beuglantes par `/hibou beugler` (cri écrit seulement). |
 | **Lettre vierge** | Papier + plume (sans forme) → 2 lettres vierges. Chaque envoi en consomme une. Clic droit avec une lettre vierge ouvre aussi la volière. |
 | **Volière (menu)** | Registre des hiboux à gauche (joueurs présents en premier, ● vert = connecté), cliquer un nom remplit le destinataire. À droite : destinataire (n° ou pseudo), objet, missive. |
@@ -68,7 +68,7 @@ Fichier `world/serverconfig/hiboupostal-server.toml` :
 | `maxBodyLength` | 1000 | Longueur max de la lettre |
 | `maxContacts` | 100 | Taille max du carnet |
 | `sealRange` | 8 | Distance max pour `/hibou sceau` |
-| `beuglanteMaxSeconds` | 20 | Durée max de la voix d'une beuglante |
+| `beuglanteMaxDurationSeconds` | 120 | Durée max de la voix d'une beuglante (2 minutes, maximum autorisé) |
 | `beuglanteRange` | 24 | Distance à laquelle on entend une beuglante |
 | `beuglanteAutoOpenSeconds` | 60 | Délai avant qu'une beuglante non ouverte éclate (0 = jamais) |
 

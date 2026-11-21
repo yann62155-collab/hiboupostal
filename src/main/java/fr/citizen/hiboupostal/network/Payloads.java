@@ -118,13 +118,16 @@ public final class Payloads {
     }
 
     // ------------------------------------------------------------------
-    // Serveur -> client : une beuglante éclate près de vous (voix)
+    // Serveur -> client : une beuglante éclate près de vous (voix, envoyée en morceaux)
     // ------------------------------------------------------------------
-    public record PlayBeuglante(double x, double y, double z, int range, String sender,
-                                byte[] audio) implements CustomPacketPayload {
+    public record PlayBeuglante(int playId, int index, int total, double x, double y, double z, int range,
+                                String sender, byte[] audio) implements CustomPacketPayload {
         public static final Type<PlayBeuglante> TYPE = new Type<>(HibouPostal.id("play_beuglante"));
         public static final StreamCodec<RegistryFriendlyByteBuf, PlayBeuglante> STREAM_CODEC = codec(
                 (buf, p) -> {
+                    buf.writeVarInt(p.playId());
+                    buf.writeVarInt(p.index());
+                    buf.writeVarInt(p.total());
                     buf.writeDouble(p.x());
                     buf.writeDouble(p.y());
                     buf.writeDouble(p.z());
@@ -132,8 +135,9 @@ public final class Payloads {
                     buf.writeUtf(p.sender(), 64);
                     buf.writeByteArray(p.audio());
                 },
-                buf -> new PlayBeuglante(buf.readDouble(), buf.readDouble(), buf.readDouble(), buf.readVarInt(),
-                        buf.readUtf(64), buf.readByteArray(600_000)));
+                buf -> new PlayBeuglante(buf.readVarInt(), buf.readVarInt(), buf.readVarInt(),
+                        buf.readDouble(), buf.readDouble(), buf.readDouble(), buf.readVarInt(),
+                        buf.readUtf(64), buf.readByteArray(300_000)));
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
